@@ -4,6 +4,7 @@ import com.devsuperior.dscatalog.dto.CategoryDTO;
 import com.devsuperior.dscatalog.dto.ProductDTO;
 import com.devsuperior.dscatalog.entities.Category;
 import com.devsuperior.dscatalog.entities.Product;
+import com.devsuperior.dscatalog.projections.ProductProjection;
 import com.devsuperior.dscatalog.repositories.CategoryRepository;
 import com.devsuperior.dscatalog.repositories.ProductRepository;
 import com.devsuperior.dscatalog.services.exceptions.DatabaseException;
@@ -12,12 +13,15 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 @Service
 public class ProductService {
@@ -89,5 +93,22 @@ public class ProductService {
             Category category = categoryRepository.getReferenceById(categoryDTO.getId());
             product.getCategories().add(category);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductDTO> findAllPaged(String name, String categoryId, Pageable pageable) {
+
+        List<Long> categoryIds = Arrays.asList();
+        if (!categoryId.equals("0")) {
+            categoryIds = Arrays.asList(categoryId.split(",")).stream().map(Long::parseLong).toList();
+        }
+
+        Page<ProductProjection> page = productRepository.searchProducts(categoryIds, name, pageable);
+        List<Long> productIds = page.map(ProductProjection::getId).toList();
+
+        List<Product> entities = productRepository.searchProductsWithCategories(productIds);
+        List<ProductDTO> dtos = entities.stream().map(entity -> new ProductDTO(entity, entity.getCategories())).toList();
+
+        return new PageImpl<>(dtos, page.getPageable(), page.getTotalElements());
     }
 }
